@@ -131,6 +131,7 @@ section[hidden] { display: none; }
           <div class="muted small">Шаги сегодня</div>
           <div class="big" id="steps-value">0</div>
           <div class="muted small" id="steps-goal"></div>
+          <div class="muted small" id="steps-extra"></div>
         </div>
         <button class="btn ghost" id="steps-edit">Ввести</button>
       </div>
@@ -199,7 +200,21 @@ section[hidden] { display: none; }
     <div class="card">
       <h2>Шаги</h2>
       <label class="field">Цель на день<input id="goal" type="number" inputmode="numeric" min="1000" max="100000" step="500"></label>
-      <p class="muted small" style="margin:12px 0 0">Сайт не может читать «Здоровье» с iPhone — Apple даёт доступ только установленным приложениям, поэтому шаги здесь вводятся вручную.</p>
+    </div>
+    <div class="card">
+      <h2>Шаги из «Здоровья» на iPhone</h2>
+      <p class="muted small" style="margin:8px 0 0">Сайт сам читать «Здоровье» не может, но шаги может передавать приложение «Команды». Настраивается один раз:</p>
+      <ol class="small" style="padding-left:20px;margin:10px 0">
+        <li>Откройте «Команды» → «+» и добавьте действие <b>«Найти образцы здоровья»</b>: тип — «Шаги», фильтр «Дата начала — сегодня».</li>
+        <li>Добавьте <b>«Рассчитать статистику»</b> — «Сумма».</li>
+        <li>Добавьте <b>«Открыть URL»</b>: вставьте ссылку ниже и сразу после неё поставьте переменную «Результат статистики».</li>
+        <li>Назовите команду «Шаги» и запустите — сайт откроется уже с шагами.</li>
+      </ol>
+      <div class="row">
+        <code id="health-link" style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;user-select:all;-webkit-user-select:all"></code>
+        <button class="btn ghost" id="health-copy">Копировать</button>
+      </div>
+      <p class="muted small" style="margin:12px 0 0">Чтобы шаги обновлялись сами: «Команды» → «Автоматизация» → например, «Время суток» → запускать команду «Шаги». Дистанцию и калории можно передать так же, дописав к ссылке <code>&amp;km=</code> и <code>&amp;kcal=</code>.</p>
     </div>
     <p class="muted small" style="padding:0 4px">События, шаги и выбранная группа хранятся только в этом браузере.</p>
   </section>
@@ -281,6 +296,7 @@ const state = {
   selection: store.get('selection', null), // {level, program, year, groupId, groupName}
   events: store.get('events', []),
   steps: store.get('steps', {}),
+  health: store.get('health', {}),          // 'YYYY-MM-DD' -> {km, kcal, at}
   goal: store.get('goal', 10000),
   lessons: {},                             // 'YYYY-MM' -> [lesson]
   loading: 0,
@@ -439,6 +455,12 @@ function render() {
   $('steps-value').textContent = fmtNum(steps);
   $('steps-goal').textContent = 'цель — ' + fmtNum(state.goal);
   $('ring').style.strokeDashoffset = 226.2 * (1 - Math.min(1, steps / Math.max(1, state.goal)));
+  const extra = state.health[today] || {};
+  $('steps-extra').textContent = [
+    extra.km ? `${extra.km.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} км` : '',
+    extra.kcal ? `${fmtNum(Math.round(extra.kcal))} ккал` : '',
+    extra.at ? `из «Здоровья» в ${extra.at}` : '',
+  ].filter(Boolean).join(' · ');
   $('today-title').textContent = longDay(today);
   $('today-status').textContent = status;
   $('today-setup').hidden = !!state.selection;
@@ -580,6 +602,40 @@ $('goal').addEventListener('change', () => {
   render();
 });
 
+// ---------- Импорт из «Здоровья» через «Команды»: ?steps=6540&km=4,2&kcal=310 ----------
+function importHealth() {
+  const query = new URLSearchParams(location.search);
+  // «Команды» могут прислать число в русском формате: «6 540» или «4,2».
+  const num = (key) => {
+    if (!query.has(key)) return null;
+    const n = parseFloat(query.get(key).replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  const steps = num('steps'), km = num('km'), kcal = num('kcal');
+  if (steps === null && km === null && kcal === null) return;
+  const today = todayIso(), now = new Date();
+  const limit = addDays(today, -62);
+  for (const day of Object.keys(state.health)) if (day < limit) delete state.health[day];
+  if (steps !== null) { state.steps[today] = Math.round(Math.min(steps, 200000)); store.set('steps', state.steps); }
+  const entry = { ...(state.health[today] || {}), at: `${pad(now.getHours())}:${pad(now.getMinutes())}` };
+  if (km !== null) entry.km = km;
+  if (kcal !== null) entry.kcal = kcal;
+  state.health[today] = entry;
+  store.set('health', state.health);
+  try { history.replaceState(null, '', location.pathname); } catch {}
+}
+$('health-link').textContent = location.origin + location.pathname + '?steps=';
+$('health-copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('health-link').textContent);
+    $('health-copy').textContent = 'Скопировано';
+  } catch {
+    getSelection().selectAllChildren($('health-link'));
+    $('health-copy').textContent = 'Выделено';
+  }
+  setTimeout(() => { $('health-copy').textContent = 'Копировать'; }, 2000);
+};
+
 // ---------- Выбор группы ----------
 let pickerOpen = false;
 let levels = null;
@@ -653,6 +709,7 @@ $('sel-clear').onclick = () => {
 };
 
 // ---------- Запуск ----------
+importHealth();
 render();
 loadMonth(state.month);
 document.addEventListener('visibilitychange', () => {
