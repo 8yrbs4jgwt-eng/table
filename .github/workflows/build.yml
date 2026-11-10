@@ -2,7 +2,9 @@ name: Build
 
 on:
   push:
+    paths: ['Table/**', 'Table.xcodeproj/**', 'Table.entitlements', '.github/workflows/build.yml']
   pull_request:
+    paths: ['Table/**', 'Table.xcodeproj/**', 'Table.entitlements', '.github/workflows/build.yml']
 
 jobs:
   build:

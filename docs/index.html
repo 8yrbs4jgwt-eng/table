@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Table">
+<meta name="theme-color" content="#f2f3f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0f13" media="(prefers-color-scheme: dark)">
+<title>Table — расписание и календарь</title>
+<style>
+:root {
+  --bg: #f2f3f7; --card: #ffffff; --text: #14161c; --muted: #6b7080; --line: #e4e6ec;
+  --accent: #355aee; --accent-soft: #e6ebff; --own: #f08a24; --danger: #d9342b; --ok: #1fa85a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0f13; --card: #1a1c23; --text: #f1f2f6; --muted: #9499a8; --line: #2a2d38;
+    --accent: #7d97ff; --accent-soft: #232b4d; --own: #ffa54d; --danger: #ff6b61; --ok: #44d07f;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+main { max-width: 640px; margin: 0 auto; padding: 16px; padding-top: calc(16px + env(safe-area-inset-top)); }
+h1 { font-size: 30px; margin: 4px 0 16px; letter-spacing: -0.02em; }
+h2 { font-size: 17px; margin: 0; }
+.card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.spread { justify-content: space-between; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.caps { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); margin-bottom: 8px; }
+.error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; -webkit-tap-highlight-color: transparent; }
+.btn { background: var(--accent); color: #fff; border-radius: 12px; padding: 11px 16px; font-weight: 600; min-height: 44px; }
+@media (prefers-color-scheme: dark) { .btn { color: #0e0f13; } }
+.btn.ghost { background: var(--accent-soft); color: var(--accent); }
+.btn.danger { background: none; color: var(--danger); }
+.icon-btn { width: 44px; height: 44px; border-radius: 12px; font-size: 22px; color: var(--accent); display: grid; place-items: center; }
+.icon-btn:active, .btn:active { opacity: .6; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Сетка месяца */
+.weekdays, .grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
+.weekdays { font-size: 12px; font-weight: 600; color: var(--muted); margin: 8px 0 4px; }
+.day { min-height: 48px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 2px 0; }
+.day .num { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.day.today .num { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.day.selected .num { background: var(--accent); color: #fff; font-weight: 700; }
+@media (prefers-color-scheme: dark) { .day.selected .num { color: #0e0f13; } }
+.dots { display: flex; gap: 3px; height: 5px; }
+.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.dot.own { background: var(--own); }
+
+/* Список дня */
+.item { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); width: 100%; text-align: left; }
+.item:first-child { border-top: 0; }
+.time { width: 46px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.time b { display: block; font-size: 15px; }
+.time span { font-size: 12px; color: var(--muted); }
+.bar { width: 4px; flex: none; border-radius: 2px; background: var(--accent); }
+.bar.own { background: var(--own); }
+.bar.off { background: var(--muted); }
+.body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.body .title { font-weight: 600; font-size: 15px; }
+.body .meta { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.cancelled .title { text-decoration: line-through; color: var(--muted); }
+.tag-off { color: var(--danger); font-size: 12px; font-weight: 700; }
+.empty { text-align: center; color: var(--muted); padding: 14px 0; font-size: 15px; }
+
+/* Шаги */
+.ring { width: 84px; height: 84px; flex: none; }
+.ring circle { fill: none; stroke-width: 9; }
+.ring .track { stroke: var(--line); }
+.ring .value { stroke: var(--ok); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset .5s; }
+.big { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+
+/* Формы */
+label.field { display: block; font-size: 13px; color: var(--muted); margin-top: 12px; }
+label.field > select, label.field > input, label.field > textarea {
+  display: block; width: 100%; margin-top: 4px; padding: 11px 12px; min-height: 44px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 12px; color: var(--text); font-size: 16px;
+}
+select:disabled { opacity: .5; }
+.check { display: flex; align-items: center; gap: 10px; margin-top: 14px; min-height: 32px; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+dl { margin: 0; }
+dl div { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
+dl div:first-child { border-top: 0; }
+dt { color: var(--muted); flex: none; }
+dd { margin: 0; text-align: right; }
+
+dialog { border: 0; border-radius: 20px; padding: 20px; width: min(520px, calc(100vw - 24px)); background: var(--card); color: var(--text); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+
+/* Нижние вкладки */
+nav {
+  position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center;
+  background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
+}
+nav button { flex: 1; max-width: 200px; padding: 8px 0 6px; font-size: 11px; font-weight: 600; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 52px; }
+nav button svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav button[aria-current="page"] { color: var(--accent); }
+section[hidden] { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <!-- Сегодня -->
+  <section id="tab-today">
+    <div class="row spread">
+      <h1>Сегодня</h1>
+      <button class="icon-btn" data-add="today" aria-label="Добавить событие">＋</button>
+    </div>
+    <div class="card" id="next-card" hidden></div>
+    <div class="card">
+      <div class="row">
+        <svg class="ring" viewBox="0 0 84 84" aria-hidden="true">
+          <circle class="track" cx="42" cy="42" r="36"/>
+          <circle class="value" id="ring" cx="42" cy="42" r="36" stroke-dasharray="226.2" stroke-dashoffset="226.2"/>
+        </svg>
+        <div style="flex:1;min-width:0">
+          <div class="muted small">Шаги сегодня</div>
+          <div class="big" id="steps-value">0</div>
+          <div class="muted small" id="steps-goal"></div>
+        </div>
+        <button class="btn ghost" id="steps-edit">Ввести</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row spread" style="margin-bottom:6px">
+        <h2 id="today-title"></h2>
+        <span class="muted small" id="today-status"></span>
+      </div>
+      <div id="today-setup" hidden>
+        <button class="btn ghost" data-go="settings" style="width:100%;margin:6px 0">Выбрать группу, чтобы видеть расписание</button>
+      </div>
+      <div id="today-list"></div>
+      <div class="error" id="today-error" hidden></div>
+    </div>
+  </section>
+
+  <!-- Календарь -->
+  <section id="tab-calendar" hidden>
+    <div class="row spread">
+      <h1>Календарь</h1>
+      <div class="row" style="gap:4px">
+        <button class="btn ghost" id="go-today">Сегодня</button>
+        <button class="icon-btn" data-add="selected" aria-label="Добавить событие">＋</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row spread">
+        <button class="icon-btn" id="prev" aria-label="Предыдущий месяц">‹</button>
+        <h2 id="month-title"></h2>
+        <button class="icon-btn" id="next" aria-label="Следующий месяц">›</button>
+      </div>
+      <div class="weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="card">
+      <div class="row spread" style="margin-bottom:6px">
+        <h2 id="day-title"></h2>
+        <span class="muted small" id="cal-status"></span>
+      </div>
+      <div id="day-list"></div>
+      <div class="error" id="cal-error" hidden></div>
+    </div>
+  </section>
+
+  <!-- Настройки -->
+  <section id="tab-settings" hidden>
+    <h1>Настройки</h1>
+    <div class="card">
+      <h2>Расписание СПбГУ · Менеджмент</h2>
+      <dl id="sel-info" style="margin-top:10px" hidden></dl>
+      <div id="picker">
+        <label class="field">Уровень обучения<select id="p-level" disabled><option>Загрузка…</option></select></label>
+        <label class="field">Направление<select id="p-program" disabled></select></label>
+        <label class="field">Год поступления<select id="p-year" disabled></select></label>
+        <label class="field">Группа<select id="p-group" disabled></select></label>
+        <div class="error" id="picker-error" hidden></div>
+        <button class="btn" id="p-save" style="width:100%;margin-top:16px" disabled>Сохранить</button>
+      </div>
+      <div id="sel-actions" class="row" style="margin-top:12px" hidden>
+        <button class="btn ghost" id="sel-change">Сменить группу</button>
+        <button class="btn danger" id="sel-clear">Отключить</button>
+      </div>
+      <p class="muted small" style="margin:12px 0 0">Занятия подгружаются с timetable.spbu.ru и сами появляются в календаре.</p>
+    </div>
+    <div class="card">
+      <h2>Шаги</h2>
+      <label class="field">Цель на день<input id="goal" type="number" inputmode="numeric" min="1000" max="100000" step="500"></label>
+      <p class="muted small" style="margin:12px 0 0">Сайт не может читать «Здоровье» с iPhone — Apple даёт доступ только установленным приложениям, поэтому шаги здесь вводятся вручную.</p>
+    </div>
+    <p class="muted small" style="padding:0 4px">События, шаги и выбранная группа хранятся только в этом браузере.</p>
+  </section>
+</main>
+
+<nav aria-label="Разделы">
+  <button data-tab="today"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>Сегодня</button>
+  <button data-tab="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Календарь</button>
+  <button data-tab="settings"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Настройки</button>
+</nav>
+
+<dialog id="editor">
+  <form method="dialog" id="editor-form">
+    <h2 id="editor-title">Новое событие</h2>
+    <label class="field">Название<input id="e-title" required maxlength="120" autocomplete="off"></label>
+    <label class="field">Дата<input id="e-date" type="date" required></label>
+    <label class="check"><input id="e-allday" type="checkbox"> Весь день</label>
+    <div class="two" id="e-times">
+      <label class="field">Начало<input id="e-start" type="time" required></label>
+      <label class="field">Конец<input id="e-end" type="time" required></label>
+    </div>
+    <label class="field">Место<input id="e-location" maxlength="120" autocomplete="off"></label>
+    <label class="field">Заметки<textarea id="e-notes" rows="3" maxlength="1000"></textarea></label>
+    <div class="row spread" style="margin-top:18px">
+      <button type="button" class="btn danger" id="e-delete" hidden>Удалить</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn ghost" id="e-cancel">Отмена</button>
+      <button type="submit" class="btn">Сохранить</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="steps-dialog">
+  <form method="dialog" id="steps-form">
+    <h2>Шаги сегодня</h2>
+    <label class="field">Количество шагов<input id="steps-input" type="number" inputmode="numeric" min="0" max="200000" required></label>
+    <div class="row" style="margin-top:18px;justify-content:flex-end">
+      <button type="button" class="btn ghost" id="steps-cancel">Отмена</button>
+      <button type="submit" class="btn">Сохранить</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+'use strict';
+const API = 'https://timetable.spbu.ru/api/v1';
+const DIVISION = 'GSOM';
+const STALE_MS = 3 * 60 * 60 * 1000;
+const $ = (id) => document.getElementById(id);
+const pad = (n) => String(n).padStart(2, '0');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ---------- Хранилище ----------
+const store = {
+  get(key, fallback) {
+    try { const raw = localStorage.getItem('table.' + key); return raw === null ? fallback : JSON.parse(raw); }
+    catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem('table.' + key, JSON.stringify(value)); } catch { /* приватный режим / нет места */ }
+  },
+  remove(key) { try { localStorage.removeItem('table.' + key); } catch {} },
+};
+
+// ---------- Даты (всё в виде строк YYYY-MM-DD, время — как в расписании, петербургское) ----------
+const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const todayIso = () => iso(new Date());
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const longDay = (s) => cap(parse(s).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }));
+const fmtNum = (n) => Number(n).toLocaleString('ru-RU');
+
+// ---------- Состояние ----------
+const state = {
+  tab: 'today',
+  selected: todayIso(),
+  month: todayIso().slice(0, 7),          // YYYY-MM
+  selection: store.get('selection', null), // {level, program, year, groupId, groupName}
+  events: store.get('events', []),
+  steps: store.get('steps', {}),
+  goal: store.get('goal', 10000),
+  lessons: {},                             // 'YYYY-MM' -> [lesson]
+  loading: 0,
+  error: '',
+};
+
+// ---------- Расписание ----------
+async function api(path) {
+  const res = await fetch(API + path, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error('Сервер расписания ответил с ошибкой ' + res.status);
+  return res.json();
+}
+
+function cacheKey(month) { return `lessons.${state.selection.groupId}.${month}`; }
+
+function monthRange(month) {
+  const [y, m] = month.split('-').map(Number);
+  const first = `${month}-01`;
+  const nextFirst = iso(new Date(y, m, 1));
+  return { from: addDays(first, -1), to: addDays(nextFirst, 1) };
+}
+
+async function loadMonth(month, force = false) {
+  if (!state.selection) return;
+  const groupId = state.selection.groupId;
+  const cached = store.get(cacheKey(month), null);
+  if (cached) {
+    state.lessons[month] = cached.items;
+    if (!force && Date.now() - cached.at < STALE_MS) { render(); return; }
+  }
+  state.loading++; render();
+  try {
+    const { from, to } = monthRange(month);
+    const data = await api(`/groups/${groupId}/events/${from}/${to}`);
+    if (!state.selection || state.selection.groupId !== groupId) return;
+    const items = [];
+    for (const day of data.Days || []) {
+      for (const ev of day.DayStudyEvents || []) {
+        if (!ev.Start || !ev.Start.startsWith(month)) continue;
+        items.push({
+          date: ev.Start.slice(0, 10),
+          start: ev.Start.slice(11, 16),
+          end: (ev.End || ev.Start).slice(11, 16),
+          subject: ev.Subject || 'Занятие',
+          location: ev.LocationsDisplayText || '',
+          educators: ev.EducatorsDisplayText || '',
+          cancelled: !!ev.IsCancelled,
+        });
+      }
+    }
+    items.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    state.lessons[month] = items;
+    store.set(cacheKey(month), { at: Date.now(), items });
+    state.error = '';
+  } catch (e) {
+    state.error = 'Не удалось обновить расписание' + (cached ? ' — показана сохранённая версия.' : '. Проверьте интернет.');
+  } finally {
+    state.loading--; render();
+  }
+}
+
+const lessonsOn = (day) => (state.lessons[day.slice(0, 7)] || []).filter((l) => l.date === day);
+const eventsOn = (day) => state.events.filter((e) => e.date === day);
+
+// «Название, вид занятия» → [название, вид]
+function splitSubject(subject) {
+  const i = subject.lastIndexOf(', ');
+  if (i < 0) return [subject, ''];
+  const kind = subject.slice(i + 2);
+  if (kind.length > 40 || kind[0] !== kind[0].toLowerCase() || kind[0] === kind[0].toUpperCase()) return [subject, ''];
+  return [subject.slice(0, i), kind];
+}
+
+// ---------- Отрисовка ----------
+function lessonHtml(l) {
+  const [title, kind] = splitSubject(l.subject);
+  return `<div class="item ${l.cancelled ? 'cancelled' : ''}">
+    <div class="time"><b>${esc(l.start)}</b><span>${esc(l.end)}</span></div>
+    <div class="bar ${l.cancelled ? 'off' : ''}"></div>
+    <div class="body">
+      <div class="title">${esc(title)}</div>
+      ${l.cancelled ? '<div class="tag-off">Отменено</div>' : (kind ? `<div class="meta">${esc(kind)}</div>` : '')}
+      ${l.location ? `<div class="meta">📍 ${esc(l.location)}</div>` : ''}
+      ${l.educators ? `<div class="meta">👤 ${esc(l.educators)}</div>` : ''}
+    </div></div>`;
+}
+
+function eventHtml(e) {
+  const time = e.allDay ? '<b>весь</b><span>день</span>' : `<b>${esc(e.start)}</b><span>${esc(e.end)}</span>`;
+  return `<button class="item" data-event="${esc(e.id)}" aria-label="Изменить событие ${esc(e.title)}">
+    <div class="time">${time}</div>
+    <div class="bar own"></div>
+    <div class="body">
+      <div class="title">${esc(e.title)}</div>
+      ${e.location ? `<div class="meta">📍 ${esc(e.location)}</div>` : ''}
+      ${e.notes ? `<div class="meta">${esc(e.notes)}</div>` : ''}
+    </div></button>`;
+}
+
+function agendaHtml(day) {
+  const rows = [
+    ...eventsOn(day).map((e) => ({ key: e.allDay ? '' : e.start, html: eventHtml(e) })),
+    ...lessonsOn(day).map((l) => ({ key: l.start, html: lessonHtml(l) })),
+  ].sort((a, b) => a.key.localeCompare(b.key));
+  return rows.length ? rows.map((r) => r.html).join('') : '<div class="empty">Ничего не запланировано</div>';
+}
+
+function nextLesson() {
+  const now = new Date();
+  const stamp = `${iso(now)}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const all = Object.values(state.lessons).flat().filter((l) => !l.cancelled && `${l.date}T${l.end}` > stamp);
+  all.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const next = all[0];
+  if (!next) return null;
+  let caption;
+  if (`${next.date}T${next.start}` <= stamp) caption = 'Идёт сейчас';
+  else if (next.date === iso(now)) {
+    const [h, m] = next.start.split(':').map(Number);
+    const mins = Math.max(1, h * 60 + m - now.getHours() * 60 - now.getMinutes());
+    caption = 'Следующая пара через ' + (mins < 60 ? `${mins} мин` : `${Math.floor(mins / 60)} ч ${mins % 60} мин`);
+  } else if (next.date === addDays(iso(now), 1)) caption = 'Следующая пара завтра';
+  else caption = 'Следующая пара — ' + longDay(next.date).toLowerCase();
+  return { next, caption };
+}
+
+function renderGrid() {
+  const [y, m] = state.month.split('-').map(Number);
+  $('month-title').textContent = cap(new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }).replace(' г.', ''));
+  const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+  const count = new Date(y, m, 0).getDate();
+  const today = todayIso();
+  let html = '<span></span>'.repeat(lead);
+  for (let d = 1; d <= count; d++) {
+    const day = `${state.month}-${pad(d)}`;
+    const cls = ['day', day === today ? 'today' : '', day === state.selected ? 'selected' : ''].join(' ');
+    const hasLessons = lessonsOn(day).length > 0;
+    const hasEvents = eventsOn(day).length > 0;
+    html += `<button class="${cls}" data-day="${day}" aria-label="${esc(longDay(day))}" ${day === state.selected ? 'aria-pressed="true"' : ''}>
+      <span class="num">${d}</span>
+      <span class="dots">${hasLessons ? '<i class="dot"></i>' : ''}${hasEvents ? '<i class="dot own"></i>' : ''}</span></button>`;
+  }
+  $('grid').innerHTML = html;
+}
+
+function render() {
+  for (const name of ['today', 'calendar', 'settings']) {
+    $('tab-' + name).hidden = state.tab !== name;
+    const btn = document.querySelector(`nav [data-tab="${name}"]`);
+    if (state.tab === name) btn.setAttribute('aria-current', 'page'); else btn.removeAttribute('aria-current');
+  }
+  const status = state.loading > 0 ? 'Обновляю…' : '';
+  const today = todayIso();
+
+  // Сегодня
+  const steps = state.steps[today] || 0;
+  $('steps-value').textContent = fmtNum(steps);
+  $('steps-goal').textContent = 'цель — ' + fmtNum(state.goal);
+  $('ring').style.strokeDashoffset = 226.2 * (1 - Math.min(1, steps / Math.max(1, state.goal)));
+  $('today-title').textContent = longDay(today);
+  $('today-status').textContent = status;
+  $('today-setup').hidden = !!state.selection;
+  $('today-list').innerHTML = agendaHtml(today);
+  const upcoming = nextLesson();
+  $('next-card').hidden = !upcoming;
+  if (upcoming) $('next-card').innerHTML = `<div class="caps">${esc(upcoming.caption)}</div>${lessonHtml(upcoming.next)}`;
+
+  // Календарь
+  renderGrid();
+  $('day-title').textContent = longDay(state.selected);
+  $('cal-status').textContent = status;
+  $('day-list').innerHTML = agendaHtml(state.selected);
+
+  for (const id of ['today-error', 'cal-error']) { $(id).hidden = !state.error; $(id).textContent = state.error; }
+
+  // Настройки
+  const sel = state.selection;
+  $('sel-info').hidden = !sel;
+  $('sel-actions').hidden = !sel;
+  if (sel) {
+    $('sel-info').innerHTML = [['Группа', sel.groupName], ['Направление', sel.program], ['Уровень', sel.level], ['Год поступления', sel.year]]
+      .map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+  }
+  $('picker').hidden = !!sel && !pickerOpen;
+  if (document.activeElement !== $('goal')) $('goal').value = state.goal;
+}
+
+// ---------- Навигация ----------
+function go(tab) {
+  state.tab = tab;
+  if (tab === 'settings' && (!state.selection || pickerOpen)) initPicker();
+  render();
+  window.scrollTo(0, 0);
+}
+function setMonth(month, selectDay) {
+  state.month = month;
+  state.selected = selectDay || (month === todayIso().slice(0, 7) ? todayIso() : `${month}-01`);
+  render();
+  loadMonth(month);
+}
+function shiftMonth(delta) {
+  const [y, m] = state.month.split('-').map(Number);
+  setMonth(iso(new Date(y, m - 1 + delta, 1)).slice(0, 7));
+}
+
+document.querySelector('nav').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tab]');
+  if (btn) go(btn.dataset.tab);
+});
+$('prev').onclick = () => shiftMonth(-1);
+$('next').onclick = () => shiftMonth(1);
+$('go-today').onclick = () => setMonth(todayIso().slice(0, 7), todayIso());
+$('grid').addEventListener('click', (e) => {
+  const cell = e.target.closest('[data-day]');
+  if (cell) { state.selected = cell.dataset.day; render(); }
+});
+let touchX = null;
+$('grid').addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+$('grid').addEventListener('touchend', (e) => {
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX; touchX = null;
+  if (Math.abs(dx) > 60) shiftMonth(dx < 0 ? 1 : -1);
+});
+document.addEventListener('click', (e) => {
+  const add = e.target.closest('[data-add]');
+  if (add) return openEditor(null, add.dataset.add === 'today' ? todayIso() : state.selected);
+  const ev = e.target.closest('[data-event]');
+  if (ev) return openEditor(state.events.find((x) => x.id === ev.dataset.event));
+  const link = e.target.closest('[data-go]');
+  if (link) go(link.dataset.go);
+});
+
+// ---------- Свои события ----------
+let editingId = null;
+function openEditor(event, day) {
+  editingId = event ? event.id : null;
+  const hour = Math.min(new Date().getHours() + 1, 22);
+  $('editor-title').textContent = event ? 'Событие' : 'Новое событие';
+  $('e-title').value = event ? event.title : '';
+  $('e-date').value = event ? event.date : day;
+  $('e-allday').checked = event ? !!event.allDay : false;
+  $('e-start').value = event && event.start ? event.start : `${pad(hour)}:00`;
+  $('e-end').value = event && event.end ? event.end : `${pad(hour + 1)}:00`;
+  $('e-location').value = event ? event.location || '' : '';
+  $('e-notes').value = event ? event.notes || '' : '';
+  $('e-delete').hidden = !event;
+  syncAllDay();
+  $('editor').showModal();
+}
+function syncAllDay() {
+  const allDay = $('e-allday').checked;
+  $('e-times').hidden = allDay;
+  $('e-start').required = $('e-end').required = !allDay;
+}
+function saveEvents() { store.set('events', state.events); render(); }
+$('e-allday').onchange = syncAllDay;
+$('e-cancel').onclick = () => $('editor').close();
+$('e-delete').onclick = () => {
+  if (!confirm('Удалить событие?')) return;
+  state.events = state.events.filter((x) => x.id !== editingId);
+  $('editor').close(); saveEvents();
+};
+$('editor-form').addEventListener('submit', (e) => {
+  const title = $('e-title').value.trim();
+  if (!title) { e.preventDefault(); $('e-title').focus(); return; }
+  const allDay = $('e-allday').checked;
+  let start = $('e-start').value, end = $('e-end').value;
+  if (!allDay && end < start) end = start;
+  const event = {
+    id: editingId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
+    title, date: $('e-date').value, allDay,
+    start: allDay ? '' : start, end: allDay ? '' : end,
+    location: $('e-location').value.trim(), notes: $('e-notes').value.trim(),
+  };
+  const i = state.events.findIndex((x) => x.id === event.id);
+  if (i >= 0) state.events[i] = event; else state.events.push(event);
+  saveEvents();
+});
+
+// ---------- Шаги ----------
+$('steps-edit').onclick = () => {
+  $('steps-input').value = state.steps[todayIso()] || '';
+  $('steps-dialog').showModal();
+  $('steps-input').select();
+};
+$('steps-cancel').onclick = () => $('steps-dialog').close();
+$('steps-form').addEventListener('submit', () => {
+  const n = Math.max(0, Math.round(Number($('steps-input').value) || 0));
+  // Храним только последние два месяца.
+  const limit = addDays(todayIso(), -62);
+  for (const day of Object.keys(state.steps)) if (day < limit) delete state.steps[day];
+  state.steps[todayIso()] = n;
+  store.set('steps', state.steps); render();
+});
+$('goal').addEventListener('change', () => {
+  const n = Math.round(Number($('goal').value));
+  if (n >= 1000 && n <= 100000) { state.goal = n; store.set('goal', n); }
+  render();
+});
+
+// ---------- Выбор группы ----------
+let pickerOpen = false;
+let levels = null;
+const fill = (select, items, placeholder) => {
+  select.innerHTML = `<option value="">${placeholder}</option>` + items.map((t, i) => `<option value="${i}">${esc(t)}</option>`).join('');
+  select.disabled = items.length === 0;
+};
+const reset = (...selects) => selects.forEach((s) => { s.innerHTML = ''; s.disabled = true; });
+function pickerError(message) { $('picker-error').hidden = !message; $('picker-error').textContent = message || ''; }
+
+async function initPicker() {
+  if (levels) return;
+  pickerError('');
+  try {
+    levels = await api(`/study/divisions/${DIVISION}/programs/levels`);
+    fill($('p-level'), levels.map((l) => l.StudyLevelName), 'Выберите уровень');
+  } catch {
+    levels = null;
+    $('p-level').innerHTML = '<option>—</option>';
+    pickerError('Не удалось загрузить список направлений. Проверьте интернет и откройте настройки снова.');
+  }
+}
+let groups = [];
+const pickedLevel = () => levels[$('p-level').value];
+const pickedProgram = () => pickedLevel().StudyProgramCombinations[$('p-program').value];
+const pickedYears = () => pickedProgram().AdmissionYears.filter((y) => !y.IsEmpty);
+
+$('p-level').onchange = () => {
+  reset($('p-program'), $('p-year'), $('p-group')); $('p-save').disabled = true;
+  if ($('p-level').value !== '') fill($('p-program'), pickedLevel().StudyProgramCombinations.map((p) => p.Name), 'Выберите направление');
+};
+$('p-program').onchange = () => {
+  reset($('p-year'), $('p-group')); $('p-save').disabled = true;
+  if ($('p-program').value !== '') fill($('p-year'), pickedYears().map((y) => y.YearName), 'Выберите год');
+};
+$('p-year').onchange = async () => {
+  reset($('p-group')); $('p-save').disabled = true; pickerError('');
+  if ($('p-year').value === '') return;
+  const year = pickedYears()[$('p-year').value];
+  $('p-group').innerHTML = '<option>Загрузка…</option>';
+  try {
+    const data = await api(`/programs/${year.StudyProgramId}/groups`);
+    if (pickedYears()[$('p-year').value] !== year) return;
+    groups = data.Groups || [];
+    if (groups.length) fill($('p-group'), groups.map((g) => g.StudentGroupName + (g.StudentGroupStudyForm ? ` · ${g.StudentGroupStudyForm}` : '')), 'Выберите группу');
+    else { $('p-group').innerHTML = '<option>Групп не найдено</option>'; }
+  } catch {
+    reset($('p-group')); pickerError('Не удалось загрузить группы. Выберите год ещё раз.');
+  }
+};
+$('p-group').onchange = () => { $('p-save').disabled = $('p-group').value === ''; };
+$('p-save').onclick = () => {
+  const group = groups[$('p-group').value];
+  if (!group) return;
+  state.selection = {
+    level: pickedLevel().StudyLevelName, program: pickedProgram().Name,
+    year: pickedYears()[$('p-year').value].YearName,
+    groupId: group.StudentGroupId, groupName: group.StudentGroupName,
+  };
+  store.set('selection', state.selection);
+  state.lessons = {}; state.error = ''; pickerOpen = false;
+  go('calendar');
+  loadMonth(state.month, true);
+  if (state.month !== todayIso().slice(0, 7)) loadMonth(todayIso().slice(0, 7), true);
+};
+$('sel-change').onclick = () => { pickerOpen = true; initPicker(); render(); };
+$('sel-clear').onclick = () => {
+  if (!confirm('Отключить расписание? Свои события останутся.')) return;
+  state.selection = null; state.lessons = {}; state.error = ''; pickerOpen = false;
+  store.remove('selection'); initPicker(); render();
+};
+
+// ---------- Запуск ----------
+render();
+loadMonth(state.month);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  render();
+  loadMonth(todayIso().slice(0, 7));
+  if (state.month !== todayIso().slice(0, 7)) loadMonth(state.month);
+});
+setInterval(render, 60 * 1000);
+</script>
+</body>
+</html>
