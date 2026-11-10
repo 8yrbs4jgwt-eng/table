@@ -1,0 +1,18 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project Table.xcodeproj -target Table -configuration Debug \
+            -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build \
+            | grep -E "error|warning: unre|BUILD|\*\*" || true
+          test -d build/Debug-iphonesimulator/Table.app
